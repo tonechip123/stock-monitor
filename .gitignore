@@ -1,0 +1,21 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.exe
+!StockMonitor/lib/*.dll
+
+# 指标引擎源码(私有, 不上传)
+StockMonitor.Indicator/
+
+# 测试项目
+StockMonitor.Tests/
+
+# 运行时生成
+watchlist.json
+logs/
+*.log
+
+# 实现计划(私有)
+实现计划.md

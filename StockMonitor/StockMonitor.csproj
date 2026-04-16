@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.1.0</Version>
+    <ApplicationIcon>monitor.ico</ApplicationIcon>
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="StockMonitor.Indicator">
+      <HintPath>lib\StockMonitor.Indicator.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
