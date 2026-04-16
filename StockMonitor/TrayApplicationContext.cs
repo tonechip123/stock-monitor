@@ -240,9 +240,13 @@ public class TrayApplicationContext : ApplicationContext
 
         // 托盘图标: 大周期信号优先
         var iconSignal = r.LongSignalType != "None" ? r.LongSignalType : r.ShortSignalType;
-        _trayIcon.Icon?.Dispose();
-        _trayIcon.Icon = TrayIconRenderer.Render(
+        var oldIcon = _trayIcon.Icon;
+        var newIcon = TrayIconRenderer.Render(
             stock.PinYin, stock.Price, stock.ChangePercent, iconSignal);
+        _trayIcon.Icon = newIcon;
+        // 闪烁期间不释放旧图标(闪烁用的是_normalIcon引用)
+        if (!_isBlinking && oldIcon != null && oldIcon != _blinkIcon)
+            oldIcon.Dispose();
 
         _trayIcon.Text = TrayIconRenderer.BuildTooltip(
             stock.Name, stock.Code, stock.Price, stock.ChangePercent,

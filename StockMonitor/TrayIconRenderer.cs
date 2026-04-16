@@ -1,20 +1,23 @@
 using System.Drawing;
 using System.Drawing.Text;
+using System.Runtime.InteropServices;
 
 namespace StockMonitor;
 
 public static class TrayIconRenderer
 {
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr handle);
+
     /// <summary>
     /// 渲染16x16托盘图标: 第1行拼音缩写(2字母), 第2行价格
     /// </summary>
     public static Icon Render(string pinyin, double price, double changePercent, string signalType)
     {
-        var bmp = new Bitmap(16, 16);
+        using var bmp = new Bitmap(16, 16);
         using var g = Graphics.FromImage(bmp);
         g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
 
-        // 背景色: 共振买入=绿, 共振卖出=红, 正常=深灰
         var bgColor = signalType switch
         {
             "Buy" => Color.FromArgb(0, 128, 0),
@@ -23,18 +26,21 @@ public static class TrayIconRenderer
         };
         g.Clear(bgColor);
 
-        // 第1行: 拼音缩写(取前2个字母)
         var abbr = pinyin.Length >= 2 ? pinyin[..2] : pinyin;
         using var fontSmall = new Font("Consolas", 6f, FontStyle.Bold, GraphicsUnit.Pixel);
         g.DrawString(abbr, fontSmall, Brushes.White, -1, 0);
 
-        // 第2行: 价格(尽量精简)
         var priceStr = FormatPrice(price);
         var priceColor = changePercent >= 0 ? Color.FromArgb(255, 80, 80) : Color.FromArgb(80, 255, 80);
         using var priceBrush = new SolidBrush(priceColor);
         g.DrawString(priceStr, fontSmall, priceBrush, -1, 8);
 
-        var icon = Icon.FromHandle(bmp.GetHicon());
+        // GetHicon创建GDI句柄, 必须用Icon.Clone复制后DestroyIcon释放
+        var hIcon = bmp.GetHicon();
+        var tempIcon = Icon.FromHandle(hIcon);
+        var icon = (Icon)tempIcon.Clone(); // 克隆后不依赖hIcon
+        tempIcon.Dispose();
+        DestroyIcon(hIcon); // 释放GDI句柄
         return icon;
     }
 

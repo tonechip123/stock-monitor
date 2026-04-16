@@ -11,6 +11,7 @@ public class FloatingBar : Form
     private Point _dragStart;
     private bool _dragging;
     private bool _didDrag;
+    private ContextMenuStrip? _lastMenu; // 上一次弹出的菜单, 需要释放
 
     public event EventHandler? NextStockRequested;
 
@@ -109,7 +110,11 @@ public class FloatingBar : Form
 
     private void ShowCombinedMenu()
     {
+        // 释放上一次的菜单
+        _lastMenu?.Dispose();
+
         var menu = new ContextMenuStrip();
+        _lastMenu = menu;
 
         // 隐藏悬浮窗
         var hideItem = new ToolStripMenuItem("隐藏悬浮窗");
