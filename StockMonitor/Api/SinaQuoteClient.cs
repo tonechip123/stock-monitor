@@ -23,7 +23,7 @@ public static class SinaQuoteClient
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         var handler = new HttpClientHandler { UseProxy = false };
-        Http = new HttpClient(handler);
+        Http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
         Http.DefaultRequestHeaders.Add("User-Agent",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36");
         Http.DefaultRequestHeaders.Add("Referer", "http://finance.sina.com.cn/");

@@ -141,10 +141,10 @@ public class TrayApplicationContext : ApplicationContext
                             }
                         }
 
-                        // 回到UI线程刷新显示
+                        // 回到UI线程刷新显示(BeginInvoke不阻塞后台线程)
                         try
                         {
-                            _floatingBar.Invoke(() => UpdateDisplay());
+                            _floatingBar.BeginInvoke(() => UpdateDisplay());
                         }
                         catch { }
                     }
