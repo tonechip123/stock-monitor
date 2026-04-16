@@ -23,13 +23,9 @@ static class Program
 
         ApplicationConfiguration.Initialize();
 
-        // 启动时检查升级
-        var needRestart = AutoUpdater.CheckAndUpdate().GetAwaiter().GetResult();
-        if (needRestart)
-        {
-            Application.Exit();
-            return;
-        }
+        // 启动时检查升级(同步版本检查+异步下载窗口)
+        if (AutoUpdater.CheckAndPrompt())
+            return; // 正在升级, 退出当前进程
 
         Application.Run(new TrayApplicationContext());
     }
