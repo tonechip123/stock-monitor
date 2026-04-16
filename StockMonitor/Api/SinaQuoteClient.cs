@@ -19,6 +19,9 @@ public static class SinaQuoteClient
 
     static SinaQuoteClient()
     {
+        // 注册GBK编码支持(.NET 9默认不包含)
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
         var handler = new HttpClientHandler { UseProxy = false };
         Http = new HttpClient(handler);
         Http.DefaultRequestHeaders.Add("User-Agent",
