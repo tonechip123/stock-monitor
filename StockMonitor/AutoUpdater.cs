@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
 
@@ -12,18 +13,14 @@ public static class AutoUpdater
     public static string CurrentVersion =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
-    /// <summary>
-    /// 同步检查版本(快速, 不阻塞), 有新版弹确认框, 确认后打开下载窗口
-    /// 返回true表示正在升级, 主程序应退出
-    /// </summary>
     public static bool CheckAndPrompt()
     {
         try
         {
-            using var handler = new HttpClientHandler { UseProxy = false };
-            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-
-            var json = http.GetStringAsync(VersionUrl).GetAwaiter().GetResult();
+            // 同步获取版本信息(快速, <1秒)
+            using var wc = new WebClient();
+            wc.Proxy = null;
+            var json = wc.DownloadString(VersionUrl);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -38,7 +35,6 @@ public static class AutoUpdater
 
             if (result != DialogResult.Yes) return false;
 
-            // 打开下载窗口(独立消息循环, 不阻塞)
             var dlForm = new DownloadForm();
             Application.Run(dlForm);
             return dlForm.Success;
@@ -57,14 +53,15 @@ public static class AutoUpdater
     }
 }
 
-/// <summary>
-/// 独立下载窗口 — 有自己的消息循环, 不会"未响应"
-/// </summary>
 internal class DownloadForm : Form
 {
     private readonly ProgressBar _bar;
     private readonly Label _label;
+    private readonly WebClient _wc;
     public bool Success { get; private set; }
+
+    private string _newPath = "";
+    private string _exePath = "";
 
     private const string DownloadUrl = "http://8.147.70.248:8080/tools/StockMonitor.exe";
 
@@ -94,92 +91,84 @@ internal class DownloadForm : Form
         };
 
         Controls.AddRange(new Control[] { _bar, _label });
+
+        // WebClient异步下载 — 自带进度事件, 不阻塞UI
+        _wc = new WebClient();
+        _wc.Proxy = null;
+        _wc.DownloadProgressChanged += OnProgress;
+        _wc.DownloadFileCompleted += OnCompleted;
     }
 
-    protected override async void OnShown(EventArgs e)
+    protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        await DownloadAndReplace();
+
+        _exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+        if (string.IsNullOrEmpty(_exePath)) { Close(); return; }
+
+        _newPath = _exePath + ".new";
+
+        // 启动异步下载(WebClient内部用后台线程, 进度事件自动回到UI线程)
+        _wc.DownloadFileAsync(new Uri(DownloadUrl), _newPath);
     }
 
-    private async Task DownloadAndReplace()
+    private void OnProgress(object sender, DownloadProgressChangedEventArgs e)
     {
-        try
+        _bar.Value = e.ProgressPercentage;
+        var dlMB = e.BytesReceived / 1024 / 1024;
+        var totalMB = e.TotalBytesToReceive / 1024 / 1024;
+        _label.Text = $"下载中 {dlMB}MB / {totalMB}MB ({e.ProgressPercentage}%)";
+    }
+
+    private void OnCompleted(object? sender, System.ComponentModel.AsyncCompletedEventArgs e)
+    {
+        if (e.Error != null)
         {
-            var exePath = Process.GetCurrentProcess().MainModule?.FileName;
-            if (string.IsNullOrEmpty(exePath)) { Close(); return; }
-
-            var newPath = exePath + ".new";
-            var oldPath = exePath + ".old";
-
-            using var handler = new HttpClientHandler { UseProxy = false };
-            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
-
-            using var response = await http.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-
-            var totalBytes = response.Content.Headers.ContentLength ?? 0;
-            using var stream = await response.Content.ReadAsStreamAsync();
-            using var fileStream = new FileStream(newPath, FileMode.Create, FileAccess.Write);
-
-            var buffer = new byte[81920];
-            long downloaded = 0;
-
-            while (true)
-            {
-                var bytesRead = await stream.ReadAsync(buffer);
-                if (bytesRead == 0) break;
-
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
-                downloaded += bytesRead;
-
-                if (totalBytes > 0)
-                {
-                    var percent = (int)(downloaded * 100 / totalBytes);
-                    _bar.Value = Math.Min(percent, 100);
-                    _label.Text = $"下载中 {downloaded / 1024 / 1024}MB / {totalBytes / 1024 / 1024}MB ({percent}%)";
-                }
-            }
-
-            fileStream.Close();
-
-            // 写替换脚本
-            var batPath = Path.Combine(Path.GetTempPath(), "stockmonitor_update.bat");
-            var bat = $"""
-                @echo off
-                :wait
-                tasklist /fi "PID eq {Environment.ProcessId}" | find "{Environment.ProcessId}" >nul
-                if not errorlevel 1 (
-                    timeout /t 1 /nobreak >nul
-                    goto wait
-                )
-                move /y "{exePath}" "{oldPath}"
-                move /y "{newPath}" "{exePath}"
-                start "" "{exePath}"
-                timeout /t 3 /nobreak >nul
-                del /f "{oldPath}" >nul 2>&1
-                del /f "%~f0" >nul 2>&1
-                """;
-            File.WriteAllText(batPath, bat, System.Text.Encoding.Default);
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = batPath,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
-
-            Success = true;
-            _label.Text = "下载完成, 正在重启...";
-            await Task.Delay(500);
-            Close();
-        }
-        catch (Exception ex)
-        {
-            _label.Text = $"下载失败: {ex.Message}";
+            _label.Text = $"下载失败: {e.Error.Message}";
             _bar.Value = 0;
-            await Task.Delay(3000);
-            Close();
+            var timer = new System.Windows.Forms.Timer { Interval = 3000 };
+            timer.Tick += (_, _) => { timer.Stop(); Close(); };
+            timer.Start();
+            return;
         }
+
+        // 下载成功, 写替换脚本
+        var oldPath = _exePath + ".old";
+        var batPath = Path.Combine(Path.GetTempPath(), "stockmonitor_update.bat");
+        var bat = $"""
+            @echo off
+            :wait
+            tasklist /fi "PID eq {Environment.ProcessId}" | find "{Environment.ProcessId}" >nul
+            if not errorlevel 1 (
+                timeout /t 1 /nobreak >nul
+                goto wait
+            )
+            move /y "{_exePath}" "{oldPath}"
+            move /y "{_newPath}" "{_exePath}"
+            start "" "{_exePath}"
+            timeout /t 3 /nobreak >nul
+            del /f "{oldPath}" >nul 2>&1
+            del /f "%~f0" >nul 2>&1
+            """;
+        File.WriteAllText(batPath, bat, System.Text.Encoding.Default);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = batPath,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        });
+
+        Success = true;
+        _label.Text = "下载完成, 正在重启...";
+        var closeTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        closeTimer.Tick += (_, _) => { closeTimer.Stop(); Close(); };
+        closeTimer.Start();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _wc.Dispose();
+        base.Dispose(disposing);
     }
 }
