@@ -1,0 +1,9 @@
+# Windows C# 项目统一行尾
+* text=auto eol=crlf
+
+# 二进制文件不做行尾转换
+*.dll binary
+*.exe binary
+*.ico binary
+*.png binary
+*.jpg binary
