@@ -43,6 +43,10 @@
 
 ![信号示意](docs/signal_demo.png)
 
+### K线买卖信号示意
+
+![BS信号](docs/bs_signal.png)
+
 ## 快速开始
 
 ### 方式一：直接下载（推荐）
