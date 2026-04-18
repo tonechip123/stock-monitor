@@ -174,17 +174,13 @@ public class FloatingBar : Form
     {
         if (Visible)
         {
-            // 已显示: 提到最前面
-            TopMost = true;
-            BringToFront();
-            Activate();
+            Hide();
         }
         else
         {
             Show();
             TopMost = true;
             BringToFront();
-            Activate();
         }
     }
 
